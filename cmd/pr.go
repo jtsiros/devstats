@@ -26,6 +26,8 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"log"
+	_ "net/http/pprof"
 	"os"
 	"strings"
 	"sync/atomic"
@@ -134,7 +136,7 @@ func run() error {
 	gc := github.NewClient(oc)
 
 	stats := []ContributorStats{}
-	fmt.Printf("Groking PR stats for %s from [%s]...", prOpts.Authors, prOpts.FromDate)
+	fmt.Printf("Groking PR stats for %s from [%s]...\n", prOpts.Authors, prOpts.FromDate)
 
 	for _, a := range prOpts.Authors {
 		prs, err := pullRequests(ctx, gc, prOpts.Repo, a)
@@ -147,9 +149,7 @@ func run() error {
 		stats = append(stats, s)
 	}
 
-	fmt.Println(colorGreen, "finished")
 	render(stats)
-
 	return nil
 }
 
@@ -206,7 +206,8 @@ func pullRequests(ctx context.Context, gc *github.Client, repo string, author st
 					i.GetNumber(),
 				)
 				if err != nil {
-					return err
+					log.Printf("unexpected err fetching %d: %s", i.GetNumber(), err)
+					continue
 				}
 				if resp.StatusCode != 200 {
 					body, _ := ioutil.ReadAll(resp.Body)
