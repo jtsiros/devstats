@@ -19,6 +19,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 */
+
 package cmd
 
 import (
@@ -50,7 +51,7 @@ func init() {
 	// Cobra supports persistent flags, which, if defined here,
 	// will be global for your application.
 
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.devstats.yaml)")
+	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", ".env", "config file (default is ./.env)")
 
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
@@ -63,14 +64,12 @@ func initConfig() {
 		// Use config file from the flag.
 		viper.SetConfigFile(cfgFile)
 	} else {
-		// Find home directory.
-		home, err := os.UserHomeDir()
+		// Find cwd directory.
+		cwd, err := os.Getwd()
 		cobra.CheckErr(err)
 
-		// Search config in home directory with name ".devstats" (without extension).
-		viper.AddConfigPath(home)
-		viper.SetConfigType("yaml")
-		viper.SetConfigName(".devstats")
+		viper.AddConfigPath(cwd)
+		viper.SetConfigName(".env")
 	}
 
 	viper.AutomaticEnv() // read in environment variables that match

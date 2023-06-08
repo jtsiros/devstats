@@ -1,5 +1,5 @@
 /*
-Copyright © 2021 Jon Tsiros jon.tsiros@gmail.com
+Copyright © 2021 Jon Tsiros jon.tsiros@brightblock.ai
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -19,13 +19,14 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 */
+
 package cmd
 
 import (
 	"context"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"os"
 	"strings"
 	"sync/atomic"
@@ -37,6 +38,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"golang.org/x/oauth2"
+
 	"golang.org/x/sync/errgroup"
 )
 
@@ -46,12 +48,12 @@ func init() {
 	prCmd.Flags().StringArrayVarP(&prOpts.Authors, "author", "a",
 		[]string{}, "authors to calculate PR open time")
 
-	prCmd.MarkFlagRequired("toggle")
+	_ = prCmd.MarkFlagRequired("toggle")
 
 	prCmd.Flags().StringVarP(&prOpts.Repo, "repo", "r", "cockroach",
 		"repository to fetch PRs from")
 
-	prCmd.MarkFlagRequired("repo")
+	_ = prCmd.MarkFlagRequired("repo")
 
 	prCmd.Flags().StringVarP(&prOpts.FromDate, "from", "f",
 		time.Now().AddDate(0, -1, 0).Format("2006-01-02"),
@@ -92,6 +94,7 @@ PRs: total number of PRs merged by from date.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return run()
 	},
+	SilenceUsage: true,
 }
 
 type ContributorStats struct {
@@ -133,8 +136,8 @@ func run() error {
 	oc := oauth2.NewClient(ctx, t)
 	gc := github.NewClient(oc)
 
-	stats := []ContributorStats{}
-	fmt.Printf("Groking PR stats for %s from [%s]...", prOpts.Authors, prOpts.FromDate)
+	var cstats []ContributorStats
+	fmt.Printf("Groking PR stats for %s from [%s]...\n", prOpts.Authors, prOpts.FromDate)
 
 	for _, a := range prOpts.Authors {
 		prs, err := pullRequests(ctx, gc, prOpts.Repo, a)
@@ -144,11 +147,11 @@ func run() error {
 
 		s := calculateStats(prs)
 		s.Author = a
-		stats = append(stats, s)
+		cstats = append(cstats, s)
 	}
 
 	fmt.Println(colorGreen, "finished")
-	render(stats)
+	render(cstats)
 
 	return nil
 }
@@ -209,8 +212,11 @@ func pullRequests(ctx context.Context, gc *github.Client, repo string, author st
 					return err
 				}
 				if resp.StatusCode != 200 {
-					body, _ := ioutil.ReadAll(resp.Body)
-					resp.Body.Close()
+					body, _ := io.ReadAll(resp.Body)
+					err := resp.Body.Close()
+					if err != nil {
+						return err
+					}
 
 					return fmt.Errorf("PR GET (%d): [%d] - %s",
 						resp.StatusCode,
@@ -231,11 +237,10 @@ func pullRequests(ctx context.Context, gc *github.Client, repo string, author st
 	}
 
 	// reduce
-	allPRs := []*github.PullRequest{}
+	var allPRs []*github.PullRequest
 	for pr := range prs {
 		allPRs = append(allPRs, pr)
 	}
-
 	return allPRs, g.Wait()
 }
 
