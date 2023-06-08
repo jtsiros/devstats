@@ -32,7 +32,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/google/go-github/v40/github"
+	"github.com/google/go-github/v53/github"
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/montanaflynn/stats"
 	"github.com/spf13/cobra"
@@ -70,7 +70,7 @@ type SearchPROpts struct {
 const (
 	colorGreen        = "\033[32m"
 	nWorkers          = 4
-	workerChanSize    = 8
+	workerChanSize    = 1024
 	ownerRepoTokenLen = 2
 )
 
@@ -172,12 +172,15 @@ func pullRequests(ctx context.Context, gc *github.Client, repo string, author st
 
 	g.Go(func() error {
 		defer close(issues)
-		sba := searchByAuthor(author)
+		sba := searchByAuthor(author, repo)
+
+		fmt.Println("search query: [", sba, "]")
 		for {
 			sr, resp, err := gc.Search.Issues(ctx, sba, opt)
 			if err != nil {
 				return err
 			}
+
 			for _, i := range sr.Issues {
 				issues <- i
 			}
@@ -203,14 +206,20 @@ func pullRequests(ctx context.Context, gc *github.Client, repo string, author st
 			}()
 
 			for i := range issues {
+				if !i.IsPullRequest() {
+					continue
+				}
+
 				pr, resp, err := gc.PullRequests.Get(ctx,
 					ownerAndRepo[0],
 					ownerAndRepo[1],
 					i.GetNumber(),
 				)
 				if err != nil {
-					return err
+					// skip processing this PR since we couldn't fetch it.
+					continue
 				}
+
 				if resp.StatusCode != 200 {
 					body, _ := io.ReadAll(resp.Body)
 					err := resp.Body.Close()
@@ -251,7 +260,7 @@ func calculateStats(prs []*github.PullRequest) ContributorStats {
 	changeSize := make([]float64, len(prs))
 
 	for i, pr := range prs {
-		delta := pr.GetMergedAt().Sub(pr.GetCreatedAt()).Hours()
+		delta := pr.GetMergedAt().Sub(pr.GetCreatedAt().Time).Hours()
 		mergeDeltas[i] = delta
 		changeSize[i] = float64(pr.GetAdditions() + pr.GetDeletions())
 		commits[i] = float64(pr.GetCommits())
@@ -272,7 +281,7 @@ func render(stats []ContributorStats) {
 	t.SetOutputMirror(os.Stdout)
 	t.AppendHeader(table.Row{
 		"Author",
-		"Merge Time (mean/median/mad)",
+		"Merge Time (mean/median/mad) hours",
 		"Comments (mean/median/mad)",
 		"Commits (mean/median/mad)",
 		"Change Size +/- (mean/median/mad)",
@@ -308,10 +317,11 @@ func shortFmt(f float64) string {
 	return fmt.Sprintf("%.2f", f)
 }
 
-func searchByAuthor(author string) string {
+func searchByAuthor(author string, repo string) string {
 	var sb strings.Builder
 
-	sb.WriteString("is:pr is:closed is:merged")
+	sb.WriteString("is:pull-request is:closed is:merged")
+	sb.WriteString(fmt.Sprintf(" repo:%s", repo))
 
 	if len(prOpts.FromDate) != 0 {
 		sb.WriteString(fmt.Sprintf(" created:>%s", prOpts.FromDate))

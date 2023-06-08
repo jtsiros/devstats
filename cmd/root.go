@@ -24,8 +24,9 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/spf13/cobra"
 	"os"
+
+	"github.com/spf13/cobra"
 
 	"github.com/spf13/viper"
 )
@@ -35,7 +36,7 @@ var cfgFile string
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
 	Use:   "devstats",
-	Short: "Calculates pr stats for a repo and list of authors.",
+	Short: "Calculates pr stats for a repo and list of authors",
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -51,7 +52,7 @@ func init() {
 	// Cobra supports persistent flags, which, if defined here,
 	// will be global for your application.
 
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", ".env", "config file (default is ./.env)")
+	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", ".env", "config file (default is $PWD/.env)")
 
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
